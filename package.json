@@ -8,6 +8,7 @@
     "commit": "npm run prepublish && npm test",
     "prepublish": "ngc && npm run build",
     "prepare": "ngc && npm run build",
+    "postinstall": "ngc && npm run build",
     "build": "webpack"
   },
   "repository": {
