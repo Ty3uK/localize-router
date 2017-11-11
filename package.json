@@ -6,8 +6,8 @@
     "test": "karma start",
     "test-watch": "karma start --singleRun=false --autoWatch=true",
     "commit": "npm run prepublish && npm test",
-    "prepare": "ngc && npm run build",
-    "prepublish": "ngc && npm run build",
+    "prepare": "echo 'prepare' > prepare.txt; ngc && npm run build",
+    "prepublish": "necho 'prepublish' > prepublish.txt; gc && npm run build",
     "build": "webpack"
   },
   "repository": {
