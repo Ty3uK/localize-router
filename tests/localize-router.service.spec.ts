@@ -1,194 +1,163 @@
-import { Injector } from '@angular/core';
+import { LocalizeRouterPipe } from '../src/localize-router.pipe';
 import { LocalizeRouterService } from '../src/localize-router.service';
-import { LocalizeParser } from '../src/localize-router.parser';
-import { LocalizeRouterSettings } from '../src/localize-router.config';
-import { LocalizeRouterModule } from '../src/localize-router.module';
-import { getTestBed, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { Routes, Router, Event, NavigationStart, NavigationEnd } from '@angular/router';
-import { Observable } from 'rxjs/Observable';
+import { Injector, ChangeDetectorRef } from '@angular/core';
+import { getTestBed, TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs/Subject';
-import { TranslateService } from '@ngx-translate/core';
-import { CommonModule, Location } from '@angular/common';
 
-class FakeTranslateService {
-  defLang: string;
-  currentLang: string;
-
-  browserLang: string = '';
-
-  content: any = {
-    'PREFIX.home': 'home_TR',
-    'PREFIX.about': 'about_TR'
-  };
-
-  setDefaultLang = (lang: string) => { this.defLang = lang; };
-  use = (lang: string) => { this.currentLang = lang; };
-  get = (input: string) => Observable.of(this.content[input] || input);
-  getBrowserLang = () => this.browserLang;
-}
-
-class FakeRouter {
-  routes: Routes;
-  fakeRouterEvents: Subject<Event> = new Subject<Event>();
-
-  resetConfig = (routes: Routes) => { this.routes = routes; };
-
-  get events(): Observable<Event> {
-    return this.fakeRouterEvents;
+class FakeChangeDetectorRef extends ChangeDetectorRef {
+  markForCheck(): void {
   }
 
-  parseUrl = () => '';
+  detach(): void {
+  }
+
+  detectChanges(): void {
+  }
+
+  checkNoChanges(): void {
+  }
+
+  reattach(): void {
+  }
 }
 
-class FakeLocation {
-  path = () => '';
+class DummyLocalizeParser {
+  currentLang: string;
 }
 
-class DummyComponent {
+class FakeLocalizeRouterService {
+  routerEvents: Subject<string> = new Subject<string>();
+  parser: DummyLocalizeParser;
+
+  constructor() {
+    this.parser = new DummyLocalizeParser();
+  }
+
+  translateRoute(route: string): string {
+    return route + '_TR';
+  }
 }
 
-describe('LocalizeRouterService', () => {
+describe('LocalizeRouterPipe', () => {
   let injector: Injector;
-  let parser: LocalizeParser;
-  let router: Router;
-  let settings: LocalizeRouterSettings;
-  let localizeRouterService: LocalizeRouterService;
-  let routes: Routes;
+  let localize: LocalizeRouterService;
+  let localizePipe: LocalizeRouterPipe;
+  let ref: any;
 
   beforeEach(() => {
-    routes = [
-      { path: 'home', component: DummyComponent },
-      { path: 'home/about', component: DummyComponent }
-    ];
-
     TestBed.configureTestingModule({
-      imports: [CommonModule, LocalizeRouterModule.forRoot(routes)],
+      declarations: [LocalizeRouterPipe],
       providers: [
-        { provide: Router, useClass: FakeRouter },
-        { provide: TranslateService, useClass: FakeTranslateService },
-        { provide: Location, useClass: FakeLocation },
+        { provide: LocalizeRouterService, useClass: FakeLocalizeRouterService }
       ]
     });
     injector = getTestBed();
-    parser = injector.get(LocalizeParser);
-    router = injector.get(Router);
+    localize = injector.get(LocalizeRouterService);
+
+    ref = new FakeChangeDetectorRef();
+    localizePipe = new LocalizeRouterPipe(localize, ref);
   });
 
   afterEach(() => {
-    injector = void 0;
-    localizeRouterService = void 0;
+    injector = undefined;
+    localize = undefined;
+    localizePipe = undefined;
+    ref = undefined;
   });
 
   it('is defined', () => {
-    expect(LocalizeRouterService).toBeDefined();
-    localizeRouterService = new LocalizeRouterService(parser, settings, router);
-    expect(localizeRouterService).toBeDefined();
-    expect(localizeRouterService instanceof LocalizeRouterService).toBeTruthy();
+    expect(LocalizeRouterPipe).toBeDefined();
+    expect(localizePipe).toBeDefined();
+    expect(localizePipe instanceof LocalizeRouterPipe).toBeTruthy();
   });
 
-  it('should initialize routerEvents', () => {
-    localizeRouterService = new LocalizeRouterService(parser, settings, router);
-    expect(localizeRouterService.routerEvents).toBeDefined();
+  it('should translate a route', () => {
+    localize.parser.currentLang = 'en';
+
+    expect(localizePipe.transform('route')).toEqual('route_TR');
   });
 
-  it('should reset route config on init', () => {
-    expect((<any>router)['routes']).toEqual(void 0);
-    parser.routes = routes;
-    spyOn(router, 'resetConfig').and.callThrough();
+  it('should translate a multi segment route', () => {
+    localize.parser.currentLang = 'en';
 
-    localizeRouterService = new LocalizeRouterService(parser, settings, router);
-    localizeRouterService.init();
-    expect(router.resetConfig).toHaveBeenCalledWith(routes);
+    expect(localizePipe.transform('path/to/my/route')).toEqual('path/to/my/route_TR');
   });
 
-  it('should call parser translateRoute', () => {
-    localizeRouterService = new LocalizeRouterService(parser, settings, router);
-    let testString = 'result/path';
-    spyOn(parser, 'translateRoute').and.returnValue(testString);
+  it('should translate a complex segment route if it changed', () => {
+    localize.parser.currentLang = 'en';
+    const translateRouteSpy = spyOn(localize, 'translateRoute').and.callThrough();
 
-    let res = localizeRouterService.translateRoute('my/path');
-    expect(res).toEqual(testString);
-    expect(parser.translateRoute).toHaveBeenCalledWith('my/path');
+    localizePipe.transform(['/path', null, 'my', 5]);
+    translateRouteSpy.calls.reset();
+
+    localizePipe.transform(['/path', 4, 'my', 5]);
+    expect(translateRouteSpy).toHaveBeenCalled();
   });
 
-  it('should append language if root route', () => {
-    localizeRouterService = new LocalizeRouterService(parser, settings, router);
-    parser.currentLang = 'de';
-    parser.locales = ['de', 'en'];
-    let testString = '/my/path';
-    spyOn(parser, 'translateRoute').and.returnValue(testString);
+  it('should not translate a complex segment route if it`s not changed', () => {
+    localize.parser.currentLang = 'en';
+    const translateRouteSpy = spyOn(localize, 'translateRoute').and.callThrough();
 
-    let res = localizeRouterService.translateRoute(testString);
-    expect(res).toEqual('/de' + testString);
-    expect(parser.translateRoute).toHaveBeenCalledWith('/my/path');
+    localizePipe.transform(['/path', 4, 'my', 5]);
+    translateRouteSpy.calls.reset();
+
+    localizePipe.transform(['/path', 4, 'my', 5]);
+    expect(translateRouteSpy).not.toHaveBeenCalled();
   });
 
-  it('should translate complex route', () => {
-    localizeRouterService = new LocalizeRouterService(parser, settings, router);
-    parser.currentLang = 'de';
-    parser.locales = ['de', 'en'];
-    spyOn(parser, 'translateRoute').and.callFake((val: any) => val);
-
-    let res = localizeRouterService.translateRoute(['/my/path', 123, 'about']);
-    expect(res[0]).toEqual('/de/my/path');
-
-    expect(parser.translateRoute).toHaveBeenCalledWith('/my/path');
-    expect(parser.translateRoute).toHaveBeenCalledWith('about');
+  it('should not translate if same route already translated', () => {
+    localize.parser.currentLang = 'en';
+    const translateRouteSpy = spyOn(localize, 'translateRoute').and.callThrough();
+    localizePipe.transform('route');
+    localizePipe.transform('route');
+    expect(translateRouteSpy.calls.count()).toEqual(1);
   });
 
-  it('should translate routes if language had changed on route event', () => {
-    localizeRouterService = new LocalizeRouterService(parser, settings, router);
-    localizeRouterService.init();
-    parser.currentLang = 'de';
-    (<any>router).fakeRouterEvents.next(new NavigationStart(1, '/de/new/path'));
-    parser.locales = ['de', 'en'];
-    spyOn(parser, 'translateRoutes').and.returnValue(Observable.of(void 0));
+  it('should translate when query is a string', () => {
+    localize.parser.currentLang = 'en';
+    const translateRouteSpy = spyOn(localize, 'translateRoute').and.callThrough();
 
-    (<any>router).fakeRouterEvents.next(new NavigationStart(1, '/en/new/path'));
-    expect(parser.translateRoutes).toHaveBeenCalledWith('en');
+    localizePipe.transform('route');
+    expect(translateRouteSpy).toHaveBeenCalled();
   });
 
-  it('should not translate routes if language not found', () => {
-    localizeRouterService = new LocalizeRouterService(parser, settings, router);
-    parser.currentLang = 'de';
-    parser.locales = ['de', 'en'];
-    spyOn(parser, 'translateRoutes').and.stub();
+  it('should not translate when query is null', () => {
+    localize.parser.currentLang = 'en';
+    const translateRouteSpy = spyOn(localize, 'translateRoute').and.callThrough();
 
-    (<any>router).fakeRouterEvents.next(new NavigationStart(1, '/bla/new/path'));
-    expect(parser.translateRoutes).not.toHaveBeenCalled();
+    localizePipe.transform(null);
+    expect(translateRouteSpy).not.toHaveBeenCalled();
   });
 
-  it('should not translate routes if language is same', () => {
-    localizeRouterService = new LocalizeRouterService(parser, settings, router);
-    parser.currentLang = 'de';
-    parser.locales = ['de', 'en'];
-    spyOn(parser, 'translateRoutes').and.stub();
+  it('should not translate when query is empty string', () => {
+    localize.parser.currentLang = 'en';
+    const translateRouteSpy = spyOn(localize, 'translateRoute').and.callThrough();
 
-    (<any>router).fakeRouterEvents.next(new NavigationStart(1, '/de/new/path'));
-    expect(parser.translateRoutes).not.toHaveBeenCalled();
+    localizePipe.transform('');
+    expect(translateRouteSpy).not.toHaveBeenCalled();
   });
 
-  it('should not translate routes if not NavigationStart', () => {
-    localizeRouterService = new LocalizeRouterService(parser, settings, router);
-    parser.currentLang = 'de';
-    parser.locales = ['de', 'en'];
-    spyOn(parser, 'translateRoutes').and.stub();
+  it('should not translate when no language selected', () => {
+    localize.parser.currentLang = null;
+    const translateRouteSpy = spyOn(localize, 'translateRoute').and.callThrough();
 
-    (<any>router).fakeRouterEvents.next(new NavigationEnd(1, '/en/new/path', '/en/new/path'));
-    expect(parser.translateRoutes).not.toHaveBeenCalled();
+    localizePipe.transform('route');
+    expect(translateRouteSpy).not.toHaveBeenCalled();
   });
 
-  it('should not set new url if same language', fakeAsync(() => {
-    localizeRouterService = new LocalizeRouterService(parser, settings, router);
-    parser.currentLang = 'de';
-    parser.locales = ['de', 'en'];
-    parser.routes = routes;
-    spyOn(router, 'parseUrl').and.returnValue(null);
-    spyOn(parser, 'translateRoutes').and.returnValue(Promise.resolve('en'));
-    spyOn(history, 'pushState').and.stub();
+  it('should subscribe to service`s routerEvents', () => {
+    let query = 'MY_TEXT';
+    localize.parser.currentLang = 'en';
+    const transmformSpy = spyOn(localizePipe, 'transform').and.callThrough();
+    spyOn(ref, 'markForCheck').and.callThrough();
 
-    localizeRouterService.changeLanguage('de');
-    tick();
-    expect(history.pushState).not.toHaveBeenCalled();
-  }));
+    localizePipe.transform(query);
+    ref.markForCheck.calls.reset();
+    transmformSpy.calls.reset();
+
+    localize.parser.currentLang = 'de';
+    localize.routerEvents.next('de');
+    expect(localizePipe.transform).toHaveBeenCalled();
+    expect(ref.markForCheck).toHaveBeenCalled();
+  });
 });
