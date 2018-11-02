@@ -1,5 +1,6 @@
 import { Inject } from '@angular/core';
-import { Router, NavigationStart, ActivatedRouteSnapshot, NavigationExtras, UrlSegment } from '@angular/router';
+import { Router, NavigationStart, ActivatedRouteSnapshot, NavigationExtras } from '@angular/router';
+
 import { Subject } from 'rxjs/Subject';
 import 'rxjs/add/observable/forkJoin';
 import 'rxjs/add/operator/toPromise';
@@ -49,7 +50,11 @@ export class LocalizeRouterService {
       let rootSnapshot: ActivatedRouteSnapshot = this.router.routerState.snapshot.root;
 
       this.parser.translateRoutes(lang).subscribe(() => {
-        let url = this.traverseRouteSnapshot(rootSnapshot);
+        this.router.resetConfig(this.parser.routes);
+
+        let url = this.translateRoute(
+          this.traverseRouteSnapshot(rootSnapshot)
+        ) as string;
 
         if (!this.settings.alwaysSetPrefix) {
           let urlSegments = url.split('/');
@@ -87,30 +92,30 @@ export class LocalizeRouterService {
    * @returns {string}
    */
   private traverseRouteSnapshot(snapshot: ActivatedRouteSnapshot): string {
-    if (snapshot.firstChild && snapshot.firstChild.routeConfig && snapshot.firstChild.routeConfig.path) {
-      if (snapshot.firstChild.routeConfig.path !== '**') {
-        return this.parseSegmentValue(snapshot) + '/' + this.traverseRouteSnapshot(snapshot.firstChild);
+    if (snapshot.firstChild) {
+      if (snapshot.routeConfig) {
+        return `${this.parseSegmentValue(snapshot)}/${this.traverseRouteSnapshot(snapshot.firstChild)}`;
       } else {
-        return this.parseSegmentValue(snapshot.firstChild);
+        return this.traverseRouteSnapshot(snapshot.firstChild);
       }
     }
+
     return this.parseSegmentValue(snapshot);
   }
 
   /**
-   * Extracts new segment value based on routeConfig and url
+   * Extracts new segment value based on stored path
    * @param snapshot
    * @returns {string}
    */
   private parseSegmentValue(snapshot: ActivatedRouteSnapshot): string {
-    if (snapshot.routeConfig) {
-      if (snapshot.routeConfig.path === '**') {
-        return snapshot.url.filter((segment: UrlSegment) => segment.path).map((segment: UrlSegment) => segment.path).join('/');
-      } else {
-        let subPathSegments = snapshot.routeConfig.path.split('/');
-        return subPathSegments.map((s: string, i: number) => s.indexOf(':') === 0 ? snapshot.url[i].path : s).join('/');
-      }
+    if (snapshot.data.localizeRouter && snapshot.data.localizeRouter.path) {
+      return snapshot.data.localizeRouter.path
+        .split('/')
+        .map((s: string, i: number) => s.indexOf(':') === 0 ? snapshot.url[i].path : s)
+        .join('/');
     }
+
     return '';
   }
 
@@ -154,6 +159,7 @@ export class LocalizeRouterService {
 
       if (currentLang !== previousLang) {
         this.parser.translateRoutes(currentLang).subscribe(() => {
+          this.router.resetConfig(this.parser.routes);
           // Fire route change event
           this.routerEvents.next(currentLang);
         });
