@@ -36,8 +36,7 @@
     "@angular/core": ">=4.0.0",
     "@angular/router": ">=4.0.0",
     "@ngx-translate/core": ">=8.0.0",
-    "rxjs": ">=6.0.0",
-    "typescript": ""
+    "rxjs": ">=6.0.0"
   },
   "devDependencies": {
     "@angular/animations": "^7.0.2",
